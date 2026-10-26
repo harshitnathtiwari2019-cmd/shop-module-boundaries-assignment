@@ -1,10 +1,9 @@
 import { orders, type Order } from "./repo.ts";
-
-import { reserve, onHand } from "../inventory/index.ts";
-// VIOLATION: reaches past payments' index.ts
+import { reserve } from "../inventory/index.ts";
 import { charge } from "../payments/index.ts";
-// VIOLATION: orders should not call notifications at all - task 3
-import { send } from "../notifications/service.ts";
+import { createEventBus } from "../../platform/event-bus.ts";
+
+export const orderEventBus = createEventBus();
 
 export type PlaceResult =
   | { ok: true; orderId: string; amountPaise: number }
@@ -17,28 +16,40 @@ export interface PlaceInput {
   email: string;
 }
 
-let n = 0;
-
 export function placeOrder({
   sku,
   qty,
   unitPaise,
   email,
 }: PlaceInput): PlaceResult {
-  // VIOLATION: reading another module's table directly
-  if (onHand(sku) === 0) return { ok: false, reason: "unknown_sku" };
+  const reservation = reserve(sku, qty);
 
-  const r = reserve(sku, qty);
-  if (!r.ok) return { ok: false, reason: r.reason };
+  if (!reservation.ok) {
+    return { ok: false, reason: reservation.reason };
+  }
 
   const amountPaise = qty * unitPaise;
-  const c = charge("pending", amountPaise);
-  if (!c.ok) return { ok: false, reason: c.reason };
+  const payment = charge("pending", amountPaise);
 
-  const id = `ord_${++n}`;
-  orders().set(id, { id, sku, qty, amountPaise, chargeId: c.chargeId });
+  if (!payment.ok) {
+    return { ok: false, reason: payment.reason };
+  }
 
-  send(email, `Order ${id} confirmed`);
+  const id = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  orders().set(id, {
+    id,
+    sku,
+    qty,
+    amountPaise,
+    chargeId: payment.chargeId,
+  });
+
+  orderEventBus.publish("order.placed", {
+    orderId: id,
+    email,
+    amountPaise,
+  });
 
   return { ok: true, orderId: id, amountPaise };
 }
