@@ -1,11 +1,8 @@
 import { orders, type Order } from "./repo.ts";
 
-// VIOLATION: reaches past inventory's index.ts into its service
-import { reserve } from "../inventory/service.ts";
-// VIOLATION: reaches straight into inventory's private repo
-import { stock } from "../inventory/repo.ts";
+import { reserve, onHand } from "../inventory/index.ts";
 // VIOLATION: reaches past payments' index.ts
-import { charge } from "../payments/service.ts";
+import { charge } from "../payments/index.ts";
 // VIOLATION: orders should not call notifications at all - task 3
 import { send } from "../notifications/service.ts";
 
@@ -22,9 +19,14 @@ export interface PlaceInput {
 
 let n = 0;
 
-export function placeOrder({ sku, qty, unitPaise, email }: PlaceInput): PlaceResult {
+export function placeOrder({
+  sku,
+  qty,
+  unitPaise,
+  email,
+}: PlaceInput): PlaceResult {
   // VIOLATION: reading another module's table directly
-  if (!stock().has(sku)) return { ok: false, reason: "unknown_sku" };
+  if (onHand(sku) === 0) return { ok: false, reason: "unknown_sku" };
 
   const r = reserve(sku, qty);
   if (!r.ok) return { ok: false, reason: r.reason };
