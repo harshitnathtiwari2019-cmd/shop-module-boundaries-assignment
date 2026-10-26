@@ -1,5 +1,5 @@
 import { outbox, type Message } from "./repo.ts";
-import { orderEventBus } from "../orders/service.ts";
+import { orderEventBus } from "../orders/index.ts";
 
 let n = 0;
 
